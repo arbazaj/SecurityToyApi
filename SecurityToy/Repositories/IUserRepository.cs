@@ -8,7 +8,7 @@ namespace SecurityToy.Repositories
 {
     public interface IUserRepository
     {
-        List<User> GetAllUsers();
+        IEnumerable<User> GetAllUsers();
 
         void SaveUser(User user);
 
@@ -17,5 +17,9 @@ namespace SecurityToy.Repositories
         User GetByEmail(string email);
 
         User GetByPhone(string phone);
+
+        void UpdateUserRole(string userId, string role);
+
+        void UpdateUserAndToken(User user, VerificationToken verificationToken);
     }
 }

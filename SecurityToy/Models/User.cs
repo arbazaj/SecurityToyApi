@@ -14,13 +14,11 @@ namespace SecurityToy.Models
         [Required]
         public string Name { get; set; }
 
-        [Required]
         public string Email { get; set; }
 
         [Required]
         public string Password { get; set; }
 
-        [Required]
         public string Phone { get; set; }
 
         public bool IsActive { get; set; }
@@ -34,7 +32,5 @@ namespace SecurityToy.Models
         public string  Role { get; set; }
 
         public DateTime Created { get; set; }
-
-
     }
 }

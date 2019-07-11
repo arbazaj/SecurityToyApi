@@ -12,5 +12,20 @@ namespace SecurityToy.Models
         public const string User = "User";
 
         public const string Manager = "Manager";
+
+        private static List<string> roleList = new List<string>()
+        {
+            "Admin", "User", "Manager"
+        };
+
+        public static List<string>  GetRoleList()
+        {
+            return roleList;
+        }
+
+        public static string GetRoleByRole(string role)
+        {
+            return roleList.FirstOrDefault(r => r == role);
+        }
     }
 }

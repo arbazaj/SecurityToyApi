@@ -39,10 +39,13 @@ namespace SecurityToy
         {
             services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_2);
             services.AddDbContext<ApplicationDbContext>(opts => opts.UseSqlServer(Configuration["ConnectionString:SecurityDb"]));
-            services.Configure<Audience>(Configuration.GetSection("Audience"));
             services.AddScoped<IUserRepository, UserRepository>();
+            services.AddScoped<IVerificationTokenRepository, VerificationTokenRepository>();
 
             services.AddScoped<IUserService, UserService>();
+            services.AddScoped<IEmailService, SendGridEmailService>();
+            services.AddScoped<IVerificationTokenService, VerificationTokenService>();
+            services.AddScoped<ISmsService, TwilioSmsService>();
 
             // configure strongly typed settings objects
             var appSettingsSection = Configuration.GetSection("Audience");
@@ -64,6 +67,7 @@ namespace SecurityToy
                    ValidAudience = appSettings.Iss,
                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(appSettings.Secret))
                };
+               options.SaveToken = true;
            });
         }
 

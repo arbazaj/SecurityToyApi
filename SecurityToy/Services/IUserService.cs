@@ -9,7 +9,7 @@ namespace SecurityToy.Services
 {
     public interface IUserService
     {
-        List<User> GetAllUsers();
+        IEnumerable<User> GetAllUsers();
 
         void SaveUser(User user);
 
@@ -20,5 +20,15 @@ namespace SecurityToy.Services
         User GetByPhone(string phone);
 
         string AuthUser(User user, LoginViewModel login);
+
+        void SendVerificationEmail(User user);
+
+        string GetVerificationOtp(User user);
+
+        void UpdateUserRole(string userId, string role);
+
+        void VerifyEmail(User user, VerificationToken verificationToken);
+
+        void VerifyPhone(User user, VerificationToken verificationToken);
     }
 }

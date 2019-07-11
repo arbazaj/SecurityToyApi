@@ -3,15 +3,17 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SecurityToy.Models;
 
 namespace SecurityToy.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20190708164129_Tokens")]
+    partial class Tokens
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -26,7 +28,8 @@ namespace SecurityToy.Migrations
 
                     b.Property<DateTime>("Created");
 
-                    b.Property<string>("Email");
+                    b.Property<string>("Email")
+                        .IsRequired();
 
                     b.Property<bool>("IsActive");
 
@@ -42,7 +45,8 @@ namespace SecurityToy.Migrations
                     b.Property<string>("Password")
                         .IsRequired();
 
-                    b.Property<string>("Phone");
+                    b.Property<string>("Phone")
+                        .IsRequired();
 
                     b.Property<string>("Role");
 
@@ -55,10 +59,6 @@ namespace SecurityToy.Migrations
                 {
                     b.Property<string>("Token")
                         .ValueGeneratedOnAdd();
-
-                    b.Property<DateTime>("CreatedOn");
-
-                    b.Property<DateTime>("ExpiresOn");
 
                     b.Property<bool>("IsActive");
 
@@ -74,7 +74,7 @@ namespace SecurityToy.Migrations
             modelBuilder.Entity("SecurityToy.Models.VerificationToken", b =>
                 {
                     b.HasOne("SecurityToy.Models.User", "User")
-                        .WithMany()
+                        .WithMany("Tokens")
                         .HasForeignKey("UserId");
                 });
 #pragma warning restore 612, 618

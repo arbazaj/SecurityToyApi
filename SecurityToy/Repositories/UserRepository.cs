@@ -13,10 +13,7 @@ namespace SecurityToy.Repositories
         {
             _dbContext = dbContext;
         }
-        public List<User> GetAllUsers()
-        {
-            return _dbContext.Users.ToList();
-        }
+        public IEnumerable<User> GetAllUsers() => _dbContext.Users.ToList();
 
         public void SaveUser(User user)
         {
@@ -24,19 +21,53 @@ namespace SecurityToy.Repositories
             _dbContext.SaveChanges();
         }
 
-        public User GetByUserId(string id)
+        public User GetByUserId(string id) => _dbContext.Users.FirstOrDefault(u => u.UserId == id);
+
+        public User GetByEmail(string email) => _dbContext.Users.FirstOrDefault(u => u.Email == email);
+
+        public User GetByPhone(string phone) => _dbContext.Users.FirstOrDefault(u => u.Phone == phone);
+
+        public void UpdateUserRole(string userId, string role)
         {
-            return _dbContext.Users.FirstOrDefault(u => u.UserId == id);
+            var oldUser = _dbContext.Users.FirstOrDefault(u => u.UserId == userId);
+            if (oldUser != null)
+            {
+                oldUser.Role = role;
+                _dbContext.SaveChanges();
+            }
         }
 
-        public User GetByEmail(string email)
+        public void UpdateUserAndToken(User user, VerificationToken verificationToken)
         {
-            return _dbContext.Users.FirstOrDefault(u => u.Email == email);
-        }
+            using (var transaction = _dbContext.Database.BeginTransaction())
+            {
+                try
+                {
+                    var oldUser = _dbContext.Users.FirstOrDefault(u => u.UserId == user.UserId);
+                    if (oldUser != null)
+                    {
+                        oldUser.IsEmailVerified = user.IsEmailVerified;
+                        oldUser.IsPhoneVerified = user.IsPhoneVerified;
+                    }
+                    _dbContext.SaveChanges();
 
-        public User GetByPhone(string phone)
-        {
-            return _dbContext.Users.FirstOrDefault(u => u.Phone == phone);
+                    var oldVerificationToken = _dbContext.VerificationTokens.FirstOrDefault(vt => vt.Token == verificationToken.Token);
+                    if (oldVerificationToken != null)
+                    {
+                        oldVerificationToken.IsActive = false;
+                    }
+                    _dbContext.SaveChanges();
+                    // Commit transaction if all commands succeed, transaction will auto-rollback
+                    // when disposed if either commands fails
+                    transaction.Commit();
+                }
+                catch (Exception e)
+                {
+                    transaction.Rollback();
+                    throw e;
+
+                }
+            }
         }
     }
 }

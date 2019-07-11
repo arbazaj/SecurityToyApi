@@ -13,6 +13,7 @@ namespace SecurityToy.Models
         }
 
         public DbSet<User> Users { get; set; }
+        public DbSet<VerificationToken> VerificationTokens { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
