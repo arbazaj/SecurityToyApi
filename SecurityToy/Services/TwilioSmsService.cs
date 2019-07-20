@@ -11,10 +11,10 @@ namespace SecurityToy.Services
 {
     public class TwilioSmsService : ISmsService
     {
-        private IConfiguration _configuration;
+        private readonly IConfiguration _configuration;
         public TwilioSmsService(IConfiguration configuration)
         {
-
+            _configuration = configuration;
         }
         public Task<MessageResource> SendSmsAsync(string number, string message)
         {

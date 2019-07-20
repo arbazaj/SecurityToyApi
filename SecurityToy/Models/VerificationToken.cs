@@ -7,6 +7,13 @@ using System.Threading.Tasks;
 
 namespace SecurityToy.Models
 {
+    public enum TokenPurpose
+    {
+        PhoneVerification = 0,
+        EmailVerification = 1,
+        TwoFactorLogin = 2,
+        ForgotPassword = 3
+    }
     public class VerificationToken
     {
         [Key]
@@ -21,6 +28,8 @@ namespace SecurityToy.Models
         public  DateTime CreatedOn { get; set; }
 
         public DateTime ExpiresOn { get; set; }
+
+        public TokenPurpose TokenPurpose { get; set; }
 
     }
 }

@@ -13,7 +13,7 @@ namespace SecurityToy.Repositories
         {
             _dbContext = dbContext;
         }
-        public IEnumerable<User> GetAllUsers() => _dbContext.Users.ToList();
+        public IEnumerable<User> GetAllUsers() => _dbContext.Users.ToList().Select(user => { user.Password = null; return user; });
 
         public void SaveUser(User user)
         {
@@ -34,6 +34,48 @@ namespace SecurityToy.Repositories
             {
                 oldUser.Role = role;
                 _dbContext.SaveChanges();
+            }
+        }
+
+        public void UpdateTwoFactorLogin(string userId, bool twoFactorLogin)
+        {
+            var oldUser = _dbContext.Users.FirstOrDefault(u => u.UserId == userId);
+            if (oldUser != null)
+            {
+                oldUser.IsTwoStepVerificationEnabled = twoFactorLogin;
+                _dbContext.SaveChanges();
+            }
+        }
+
+        public void UpdatePassword(User user, VerificationToken verificationToken)
+        {
+            using (var transaction = _dbContext.Database.BeginTransaction())
+            {
+                try
+                {
+                    var oldUser = _dbContext.Users.FirstOrDefault(u => u.UserId == user.UserId);
+                    if (oldUser != null)
+                    {
+                        oldUser.Password = user.Password;
+                    }
+                    _dbContext.SaveChanges();
+
+                    var oldVerificationToken = _dbContext.VerificationTokens.FirstOrDefault(vt => vt.Token == verificationToken.Token);
+                    if (oldVerificationToken != null)
+                    {
+                        oldVerificationToken.IsActive = false;
+                    }
+                    _dbContext.SaveChanges();
+                    // Commit transaction if all commands succeed, transaction will auto-rollback
+                    // when disposed if either commands fails
+                    transaction.Commit();
+                }
+                catch (Exception e)
+                {
+                    transaction.Rollback();
+                    throw e;
+
+                }
             }
         }
 

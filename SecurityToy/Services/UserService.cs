@@ -23,15 +23,17 @@ namespace SecurityToy.Services
         private readonly IUserRepository _userRepository;
         //some config Audience information in the appsettings.json
         private readonly IOptions<Audience> _settings;
-        private IConfiguration _configuration;
-        private IEmailService _emailService;
-        private IVerificationTokenRepository _tokenRepository;
+        private readonly IConfiguration _configuration;
+        private readonly IEmailService _emailService;
+        private readonly IVerificationTokenRepository _tokenRepository;
+        private readonly ISmsService _smsService;
         public UserService(
             IUserRepository userRepository,
             IConfiguration configuration,
             IEmailService emailService,
-             IVerificationTokenRepository tokenRepository,
-            IOptions<Audience> settings
+            IVerificationTokenRepository tokenRepository,
+            IOptions<Audience> settings,
+            ISmsService smsService
         )
         {
             _userRepository = userRepository;
@@ -39,6 +41,7 @@ namespace SecurityToy.Services
             _emailService = emailService;
             _settings = settings;
             _tokenRepository = tokenRepository;
+            _smsService = smsService;
         }
 
         public IEnumerable<User> GetAllUsers() => _userRepository.GetAllUsers();
@@ -81,30 +84,49 @@ namespace SecurityToy.Services
 
         public void SendVerificationEmail(User user)
         {
-            string token = Guid.NewGuid().ToString();
-            var verificationToken = new VerificationToken()
-            {
-                IsActive = true,
-                UserId = user.UserId,
-                Token = token,
-                CreatedOn = DateTime.Now,
-                ExpiresOn = DateTime.Now.AddMinutes(5)
-            };
-            _tokenRepository.Add(verificationToken);
+            string otp = GetOtp(user, TokenPurpose.EmailVerification);
 
             var emailTemplate = new EmailTemplate()
             {
                 FromEmail = "noreply@securitytoy.com",
                 ToEmail = user.Email,
                 Subject = "Verify your SECURITY TOY account",
-                HtmlText = $"<strong>Please follow the link to verify your email for Security Toy account <a href='http://localhost:50076/api/users/verify/email?token={token}'>Verify Email</a></strong>"
+                HtmlText = $"<strong>Your otp for email verification - {otp}</strong>"
             };
             _emailService.SendEmail(emailTemplate);
         }
 
+        public void SendLoginOtpEmail(User user)
+        {
+            string otp = GetOtp(user, TokenPurpose.TwoFactorLogin);
+
+            var emailTemplate = new EmailTemplate()
+            {
+                FromEmail = "noreply@securitytoy.com",
+                ToEmail = user.Email,
+                Subject = "Your Otp for login to your Security Toy account",
+                HtmlText = $"<strong>Your otp for login - {otp}</strong>"
+            };
+            _emailService.SendEmail(emailTemplate);
+        }
+
+        public void SendLoginOtpPhone(User user)
+        {
+            string otp = GetOtp(user, TokenPurpose.TwoFactorLogin);
+            string message = $"Your otp for login to your Security Toy account - {otp}";
+            _smsService.SendSmsAsync(user.Phone, message);
+        }
+
+        public void SendPhoneVerificationSms(User user)
+        {
+            string otp = GetOtp(user, TokenPurpose.PhoneVerification);
+            string message = $"Use this otp to verify your Security Toy account- {otp}";
+            _smsService.SendSmsAsync(user.Phone, message);
+        }
+
 
         //change this and add a otp send msms
-        public string GetVerificationOtp(User user)
+        public string GetOtp(User user, TokenPurpose tokenPurpose)
         {
 
 
@@ -122,7 +144,8 @@ namespace SecurityToy.Services
                 UserId = user.UserId,
                 Token = otp,
                 CreatedOn = DateTime.Now,
-                ExpiresOn = DateTime.Now.AddMinutes(5)
+                ExpiresOn = DateTime.Now.AddMinutes(5),
+                TokenPurpose = tokenPurpose
             };
             _tokenRepository.Add(verificationToken);
             return otp;
@@ -169,5 +192,36 @@ namespace SecurityToy.Services
         }
 
         public void UpdateUserRole(string userId, string role) => _userRepository.UpdateUserRole(userId, role);
+
+        public void UpdateTwoFactorLogin(string userId, bool twoFactorLogin) =>
+            _userRepository.UpdateTwoFactorLogin(userId, twoFactorLogin);
+
+        public void SendForgotPasswordOtpEmail(User user)
+        {
+            string otp = GetOtp(user, TokenPurpose.ForgotPassword);
+
+            var emailTemplate = new EmailTemplate()
+            {
+                FromEmail = "noreply@securitytoy.com",
+                ToEmail = user.Email,
+                Subject = "Reset your Security Toy account password",
+                HtmlText = $"<strong>Your otp for resetting password - {otp}. This otp is valid for only 5 minutes</strong>"
+            };
+            _emailService.SendEmail(emailTemplate);
+        }
+
+        public void SendForgotPasswordOtpPhone(User user)
+        {
+            string otp = GetOtp(user, TokenPurpose.ForgotPassword);
+            string message = $"Use this otp to reset your Security Toy account password - {otp}. This otp is valid for only 5 minutes";
+            _smsService.SendSmsAsync(user.Phone, message);
+        }
+
+        public void ResetPassword(User user, string newPassword, VerificationToken verificationToken)
+        {
+            user.Password = Util.CreateHash(newPassword, Util.CreateSalt());
+            _userRepository.UpdatePassword(user, verificationToken);
+
+        }
     }
 }

@@ -62,6 +62,7 @@ namespace SecurityToy
                    ValidateIssuer = true,
                    ValidateAudience = true,
                    ValidateLifetime = true,
+                   ClockSkew = TimeSpan.Zero,
                    ValidateIssuerSigningKey = true,
                    ValidIssuer = appSettings.Iss,
                    ValidAudience = appSettings.Iss,
@@ -78,7 +79,13 @@ namespace SecurityToy
             {
                 app.UseDeveloperExceptionPage();
             }
+            app.UseCors(options => {
+
+                options.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+
+            });
             app.UseAuthentication();
+
             app.UseMvc();
         }
 

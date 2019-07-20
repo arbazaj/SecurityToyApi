@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication;
@@ -32,8 +33,8 @@ namespace SecurityToy.Controllers
         }
 
         [HttpGet]
-        //[Authorize(Roles = Role.User+","+Role.Admin)]
-        [Authorize(Roles = Role.Manager)]
+        //[Authorize(Roles = Role.Manager+","+Role.Admin)]
+        [Authorize(Roles = Role.Admin)]
         public ActionResult<IEnumerable<User>> Get()
         {
             try
@@ -47,7 +48,6 @@ namespace SecurityToy.Controllers
         }
 
         [HttpPost]
-        [Route("save")]
         public ActionResult Save(User user)
         {
             try
@@ -72,15 +72,9 @@ namespace SecurityToy.Controllers
 
                 _userService.SaveUser(user);
                 var title = "";
-                if (user.Email != null)
-                {
-                    _userService.SendVerificationEmail(user);
-                    title = "Registration successful. A verification email has been sent to you. Please follow the link in the email.";
-                    return Ok(new { status = 200, title, data = new { user } });
-                }
                 user.Password = null;
-                title = "Registration successful";
-                return Ok(new { status = 200, title, data = new { user } });
+                title = "Registration successful. You can now login.";
+                return Ok(new { status = 201, title, data = new { user } });
             }
             catch (Exception e)
             {
@@ -88,27 +82,45 @@ namespace SecurityToy.Controllers
             }
         }
 
-        //this method will be called by the angular app with the user object for getting the JWT token
+        
         [HttpPost]
         [Route("login")]
-        public ActionResult Auth([FromBody]LoginViewModel user)
+        public ActionResult Login([FromBody]LoginViewModel loginViewModel)
         {
             try
             {
-                var existingUser = _userService.GetByUserId(user.UserId);
+                var existingUser = _userService.GetByUserId(loginViewModel.UserId);
                 if (existingUser == null || !existingUser.IsActive)
                     return Unauthorized(new { status = 401, title = "User not found" });
 
-                //if (!existingUser.IsEmailVerified)
-                //    return Unauthorized(new { status = 401, title = "Email is not verified" });
-
                 //calling the function for the JWT token for respecting user
-                string token = _userService.AuthUser(existingUser, user);
+                string token = _userService.AuthUser(existingUser, loginViewModel);
 
                 if (token == null)
                     return Unauthorized(new { status = 401, title = "Invalid email or password" });
-                //returning the token
-                return Ok(new { status = 200, title = "Login success!", data = new { token } });
+
+                existingUser.Password = null;
+
+                if(existingUser.IsTwoStepVerificationEnabled == true)
+                {
+                    if(string.IsNullOrEmpty(loginViewModel.Otp))
+                    {
+                        return Ok(new {
+                            status = 200,
+                            title = "Two-factor login is enabled for you",
+                            data = new { user = existingUser }
+                        });
+                    }
+
+                    var verificationToken = _verificationTokenService.GetLatestUserToken(loginViewModel.UserId);
+                    if (verificationToken == null || verificationToken.Token != loginViewModel.Otp || existingUser.UserId != verificationToken.UserId || verificationToken.TokenPurpose != TokenPurpose.TwoFactorLogin)
+                        return BadRequest(new { status = 401, title = "Invalid Otp" });
+
+                    if (verificationToken.IsActive != true || verificationToken.ExpiresOn < DateTime.Now)
+                        return BadRequest(new { status = 401, title = $"Otp expired. Please create a new one" });
+                }
+                //returning the token && user
+                return Ok(new { status = 200, title = "Login success!", data = new { token, user = existingUser } });
             }
             catch (Exception e)
             {
@@ -117,14 +129,47 @@ namespace SecurityToy.Controllers
         }
 
         [HttpPost]
-        [Route("verify/email")]
-        public ActionResult SendVerificationEmail([FromBody]EmailVerificationViewModel emailViewModel)
+        [Route("{userId}/login/otp")]
+        public ActionResult SendLoginOtp([FromRoute] string userId, [FromBody]TwoFactorOtpViewModel otpViewodel)
+        {
+            try
+            {
+                var user = _userService.GetByUserId(userId);
+                if(user == null)
+                    return BadRequest(new { status = 400, title = "User not found" });
+                if(user.IsTwoStepVerificationEnabled != true)
+                    return BadRequest(new { status = 400, title = "Two-factor is not enabled for you" });
+                if(!string.IsNullOrEmpty(otpViewodel.Email) && user.IsEmailVerified)
+                {
+                    _userService.SendLoginOtpEmail(user);
+                    return Ok(new { status = 200, title = "Otp sent successfully"});
+                }
+                if(!string.IsNullOrEmpty(otpViewodel.Phone) && user.IsPhoneVerified)
+                {
+                    _userService.SendLoginOtpPhone(user);
+                    return Ok(new { status = 200, title = "Otp sent successfully" });
+                }
+                
+                return BadRequest(new { status = 400, title = "Verify your email or phone number." });
+
+            }
+            catch (Exception e)
+            {
+                return BadRequest(new { status = 400, title = "Something went wrong" });
+            }
+        }
+
+        [HttpPost]
+        [Route("{userId}/verify/email")]
+        public ActionResult SendVerificationEmail([FromRoute] string userId, [FromBody]EmailVerificationViewModel emailViewModel)
         {
             try
             {
                 var user = _userService.GetByEmail(emailViewModel.Email);
                 if (user == null || !user.IsActive)
                     return BadRequest(new { status = 400, title = $"User with email - {emailViewModel.Email} does not exists" });
+                if (user.UserId != userId)
+                    return BadRequest(new { status = 400, title = "Email does not belongs to you" });
 
                 if (user.IsEmailVerified)
                     return BadRequest(new { status = 400, title = $"Email address - {emailViewModel.Email} already verified" });
@@ -146,7 +191,7 @@ namespace SecurityToy.Controllers
             {
                 var verificationToken = _verificationTokenService.GetLatestUserToken(userId);
 
-                if (verificationToken == null)
+                if (verificationToken == null || verificationToken.Token != otpViewModel.Otp)
                     return BadRequest(new { status = 400, title = "Invalid Otp" });
 
                 if (verificationToken.IsActive != true || verificationToken.ExpiresOn < DateTime.Now)
@@ -156,7 +201,7 @@ namespace SecurityToy.Controllers
                 if (user == null || !user.IsActive)
                     return BadRequest(new { status = 400, title = $"User does not exists" });
 
-                if (user.UserId != verificationToken.UserId)
+                if (user.UserId != verificationToken.UserId || verificationToken.TokenPurpose != TokenPurpose.EmailVerification)
                     return BadRequest(new { status = 400, title = "Invalid Otp" });
 
                 if (user.IsEmailVerified)
@@ -172,8 +217,8 @@ namespace SecurityToy.Controllers
         }
 
         [HttpPost]
-        [Route("verify/phone")]
-        public async Task<ActionResult> SendPhoneOtp([FromBody]PhoneVerificationViewModel phoneViewModel)
+        [Route("{userId}/verify/phone")]
+        public ActionResult SendPhoneVerificationOtp([FromRoute] string userId, [FromBody]PhoneVerificationViewModel phoneViewModel)
         {
             try
             {
@@ -181,12 +226,14 @@ namespace SecurityToy.Controllers
                 if (user == null || !user.IsActive)
                     return BadRequest(new { status = 400, title = $"User with phone number - {phoneViewModel.Phone} does not exists" });
 
+                if (user.UserId != userId)
+                    return BadRequest(new { status = 400, title = "Phone number does not belongs to you" });
+
                 if (user.IsPhoneVerified)
                     return BadRequest(new { status = 400, title = $"Phone number - {phoneViewModel.Phone} already verified" });
 
-                var otp = _userService.GetVerificationOtp(user);
-                var smsResponse = await _smsService.SendSmsAsync("+" + phoneViewModel.Phone, otp);
-                return Ok(new { data = smsResponse });
+                _userService.SendPhoneVerificationSms(user);
+                return Ok(new { status = 200, title = "Sms sent successfully." });
             }
             catch (Exception e)
             {
@@ -196,13 +243,13 @@ namespace SecurityToy.Controllers
 
         [HttpPut]
         [Route("{userId}/verify/phone")]
-        public ActionResult VerifyPhoneVerificationOtp([FromRoute] string userId, [FromBody]OtpViewModel otpViewModel)
+        public ActionResult VerifyPhone([FromRoute] string userId, [FromBody]OtpViewModel otpViewModel)
         {
             try
             {
                 var verificationToken = _verificationTokenService.GetLatestUserToken(userId);
 
-                if (verificationToken == null)
+                if (verificationToken == null || verificationToken.Token != otpViewModel.Otp)
                     return BadRequest(new { status = 400, title = "Invalid Otp" });
 
                 if (verificationToken.IsActive != true || verificationToken.ExpiresOn < DateTime.Now)
@@ -212,7 +259,7 @@ namespace SecurityToy.Controllers
                 if (user == null || !user.IsActive)
                     return BadRequest(new { status = 400, title = $"User does not exists" });
 
-                if (user.UserId != verificationToken.UserId)
+                if (user.UserId != verificationToken.UserId || verificationToken.TokenPurpose != TokenPurpose.PhoneVerification)
                     return BadRequest(new { status = 400, title = "Invalid Otp" });
 
                 if (user.IsPhoneVerified)
@@ -229,7 +276,7 @@ namespace SecurityToy.Controllers
 
         [HttpPut]
         [Authorize(Roles = Role.Admin)]
-        [Route("{userId}/role/{role}")]
+        [Route("{userId}/roles/{role}")]
         public ActionResult ChangeUserRole([FromRoute] string userId, [FromRoute] string role)
         {
             try
@@ -239,13 +286,132 @@ namespace SecurityToy.Controllers
                     return BadRequest(new { status = 400, title = "Invalid Role" });
 
                 _userService.UpdateUserRole(userId, selectedRole);
-                return Ok(new { status = 200, message = "Role changed successfully." });
+                return Ok(new { status = 200, title = "Role changed successfully." });
             }
             catch (Exception e)
             {
                 return BadRequest(new { status = 400, title = "Something went wrong." });
             }
         }
+
+        [HttpPut]
+        [Authorize]
+        [Route("{userId}/enabletwofactorlogin")]
+        public ActionResult EnableTwoFactorLogin([FromRoute] string userId)
+        {
+            try
+            {
+                string token = Request.Headers["Authorization"];
+                
+                //Remove "Bearer " fron Authorization header
+                token = token.Substring(7);
+                //decode jwt
+                var decodedJwt = new JwtSecurityToken(jwtEncodedString: token);
+
+                //get userId from claims. we set sub claim with userId while creating jwt
+                var userIdInToken = decodedJwt.Claims.First(c => c.Type == "sub").Value;
+
+                var user = _userService.GetByUserId(userId);
+                if (user == null)
+                    return BadRequest(new { status = 400, title = "User does not exists." });
+                if(user.UserId != userIdInToken)
+                    return BadRequest(new { status = 403, title = "You have insufficient permissions." });
+                if(user.IsEmailVerified != true && user.IsPhoneVerified != true)
+                    return BadRequest(new { status = 400, title = "Email address or phone number must be verified for enabling two factor authentication" });
+
+                _userService.UpdateTwoFactorLogin(userIdInToken, true);
+                return Ok(new { status = 200, title = "Two-factor Login is enabled now." });
+            }
+            catch (Exception e)
+            {
+                return BadRequest(new { status = 400, title = "Something went wrong." });
+            }
+        }
+
+        [HttpGet]
+        [Authorize]
+        [Route("{userId}")]
+        public ActionResult<User> GetByUserId([FromRoute] string userId)
+        {
+            try
+            {   var user = _userService.GetByUserId(userId);
+                user.Password = null;
+                return Ok(new { status = 200, title = "Request successful.", data = new { user } });
+            }
+            catch (Exception)
+            {
+                return BadRequest(new { status = 400, title = "Something went wrong" });
+            }
+        }
+
+        [HttpPost]
+        [Route("forgotpassword/otp")]
+        public ActionResult SendForgotPasswordOtp([FromBody]ForgotPasswordViewModel forgotPasswordViewModel)
+        {
+            try
+            {
+               
+                if (!string.IsNullOrEmpty(forgotPasswordViewModel.Email))
+                {
+                    var user = _userService.GetByEmail(forgotPasswordViewModel.Email);
+                    if (user == null || user.IsActive != true)
+                        return BadRequest(new { status = 400, title = "No user account exists with this email"});
+
+                    _userService.SendForgotPasswordOtpEmail(user);
+                    return Ok(new { status = 200, title = "Otp sent successfully", data = new { userId = user.UserId } });
+                }
+                if (!string.IsNullOrEmpty(forgotPasswordViewModel.Phone))
+                {
+                    var user = _userService.GetByPhone(forgotPasswordViewModel.Phone);
+                    if (user == null || user.IsActive != true)
+                        return BadRequest(new { status = 400, title = "No user account exists with this phone number" });
+
+                    _userService.SendForgotPasswordOtpPhone(user);
+                    return Ok(new { status = 200, title = "Otp sent successfully", data = new { userId = user.UserId } });
+                }
+
+                return BadRequest(new { status = 400, title = "Your contact is not verified" });
+
+            }
+            catch (Exception)
+            {
+                return BadRequest(new { status = 400, title = "Something went wrong" });
+            }
+        }
+
+        [HttpPut]
+        [Route("{userId}/resetpassword")]
+        public ActionResult ResetPassword([FromRoute] string userId, [FromBody]ResetPasswordViewModel resetPasswordViewModel)
+        {
+            try
+            {
+                var user = _userService.GetByUserId(userId);
+                if (user == null || user.IsActive != true)
+                    return BadRequest(new { status = 400, title = "User not found" });
+
+                var verificationToken = _verificationTokenService.GetLatestUserToken(userId);
+
+                if (verificationToken == null || verificationToken.Token != resetPasswordViewModel.Otp)
+                    return BadRequest(new { status = 400, title = "Invalid Otp" });
+
+                if (verificationToken.IsActive != true || verificationToken.ExpiresOn < DateTime.Now)
+                    return BadRequest(new { status = 400, title = $"Otp expired. Please create a new one" });
+
+
+                if (user.UserId != verificationToken.UserId || verificationToken.TokenPurpose != TokenPurpose.ForgotPassword)
+                    return BadRequest(new { status = 400, title = "Invalid Otp" });
+
+                _userService.ResetPassword(user, resetPasswordViewModel.Password, verificationToken);
+
+                return Ok(new { status = 200, title = "Password reset successful." });
+            }
+            catch
+            {
+                return BadRequest(new { status = 400, title = "Something went wrong" });
+            }
+
+        }
+
     }
 
 }

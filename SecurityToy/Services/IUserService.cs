@@ -21,14 +21,26 @@ namespace SecurityToy.Services
 
         string AuthUser(User user, LoginViewModel login);
 
+        void UpdateUserRole(string userId, string role);
+
         void SendVerificationEmail(User user);
 
-        string GetVerificationOtp(User user);
+        void SendLoginOtpEmail(User user);
 
-        void UpdateUserRole(string userId, string role);
+        void SendForgotPasswordOtpEmail(User user);
+
+        void SendForgotPasswordOtpPhone(User user);
+
+        void SendPhoneVerificationSms(User user);
+
+        void SendLoginOtpPhone(User user);
 
         void VerifyEmail(User user, VerificationToken verificationToken);
 
         void VerifyPhone(User user, VerificationToken verificationToken);
+
+        void UpdateTwoFactorLogin(string userId, bool twoFactorLogin);
+
+        void ResetPassword(User user, string newPassword, VerificationToken verificationToken);
     }
 }

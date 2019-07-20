@@ -21,5 +21,9 @@ namespace SecurityToy.Repositories
         void UpdateUserRole(string userId, string role);
 
         void UpdateUserAndToken(User user, VerificationToken verificationToken);
+
+        void UpdateTwoFactorLogin(string userId, bool twoFactorLogin);
+
+        void UpdatePassword(User user, VerificationToken verificationToken);
     }
 }

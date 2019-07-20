@@ -13,5 +13,14 @@ namespace SecurityToy.ViewModels
 
         [Required]
         public string Password { get; set; }
+
+        public string Otp { get; set; }
+    }
+
+    public class TwoFactorOtpViewModel
+    {
+        public string Phone { get; set; }
+
+        public string Email { get; set; }
     }
 }
